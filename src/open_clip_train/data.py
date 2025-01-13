@@ -328,8 +328,7 @@ class ResampledShards2(IterableDataset):
 def get_wds_dataset(args, preprocess_img, is_train, epoch=0, floor=False, tokenizer=None):
     input_shards = args.train_data if is_train else args.val_data
     assert input_shards is not None
-    resampled = getattr(args, 'dataset_resampled', False) and is_train
-
+    resampled = getattr(args, 'dataset_resampled', False) and is_train    
     num_shards = None
     if is_train:
         if args.train_num_samples is not None:
@@ -386,17 +385,24 @@ def get_wds_dataset(args, preprocess_img, is_train, epoch=0, floor=False, tokeni
             # at this point, we have an iterator over the shards assigned to each worker
             wds.tarfile_to_samples(handler=log_and_continue),
         ])
+    
+    ##############################
+    def separate_gt(text):
+        text = text.split('<sep>')[1]
+        return text    
+    ##############################
+            
     pipeline.extend([
         wds.select(filter_no_caption_or_no_image),
         wds.decode("pilrgb", handler=log_and_continue),
         wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-        wds.map_dict(image=preprocess_img, text=lambda text: tokenizer(text)[0]),
+        wds.map_dict(image=preprocess_img, text=lambda text: tokenizer(separate_gt(text))[0]),
         wds.to_tuple("image", "text"),
         wds.batched(args.batch_size, partial=not is_train)
     ])
 
     dataset = wds.DataPipeline(*pipeline)
-
+       
     if is_train:
         if not resampled:
             num_shards = num_shards or len(expand_urls(input_shards)[0])
@@ -413,7 +419,7 @@ def get_wds_dataset(args, preprocess_img, is_train, epoch=0, floor=False, tokeni
     else:
         # last batches are partial, eval is done on single (master) node
         num_batches = math.ceil(num_samples / args.batch_size)
-
+        
     dataloader = wds.WebLoader(
         dataset,
         batch_size=None,
