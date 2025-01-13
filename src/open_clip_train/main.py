@@ -28,13 +28,14 @@ try:
 except ImportError:
     hvd = None
 
-from open_clip import create_model_and_transforms, trace_model, get_tokenizer, create_loss
+from src.local_open_clip.factory import create_model_and_transforms, get_tokenizer, create_loss
+from src.local_open_clip import trace_model
 from data import get_data
 from distributed import is_master, init_distributed_device, broadcast_object
 from logger import setup_logging
 from params import parse_args
 from scheduler import cosine_lr, const_lr, const_lr_cooldown
-from train import train_one_epoch, evaluate
+from train import train_one_epoch, neg_train_one_epoch, evaluate, neg_evaluate
 from file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
 
@@ -239,6 +240,8 @@ def main(args):
         cache_dir=args.cache_dir,
         **model_kwargs,
     )
+    print(f"===============mdoel===============")
+    print(model)
     if args.distill:
         # FIXME: currently assumes the model you're distilling from has the same tokenizer & transforms.
         dist_model, _, _ = create_model_and_transforms(
@@ -255,7 +258,7 @@ def main(args):
               '   pip install bitsandbytes triton'
               '   please make sure to use triton 2.0.0')
         import bitsandbytes as bnb
-        from open_clip.utils import replace_linear
+        from local_open_clip.utils import replace_linear
         print(f'=> replacing linear layers with {args.use_bnb_linear}')
         linear_replacement_cls = getattr(bnb.nn.triton_based_modules, args.use_bnb_linear)
         replace_linear(model, linear_replacement_cls)
@@ -462,15 +465,15 @@ def main(args):
             # As of now (~PyTorch 2.4/2.5), compile + grad checkpointing work, but DDP optimizer must be disabled
             torch._dynamo.config.optimize_ddp = False
 
-        model = torch.compile(original_model)
+        model = torch.compile(original_model) #compile해서 속도 up
 
     if 'train' not in data:
         # If using int8, convert to inference mode.
         if args.use_bnb_linear is not None:
-            from open_clip.utils import convert_int8_model_to_inference_mode
+            from local_open_clip.utils import convert_int8_model_to_inference_mode
             convert_int8_model_to_inference_mode(model)
         # Evaluate.
-        evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
+        neg_evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
         return
 
     loss = create_loss(args)
@@ -478,12 +481,16 @@ def main(args):
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
             logging.info(f'Start epoch {epoch}')
-        
-        train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
+        if args.force_custom_text : 
+            neg_train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
+        else : 
+            train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist_model, args, tb_writer=writer)
         completed_epoch = epoch + 1
 
         if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
-            evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
+            if args.force_custom_text :
+                neg_evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
+            else : evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
 
         # Saving checkpoints.
         if args.save_logs:

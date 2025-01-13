@@ -330,7 +330,7 @@ class CLIP(nn.Module):
 
 class CustomTextCLIP(nn.Module):
     output_dict: torch.jit.Final[bool]
-
+    # print(f"CUSTOM TEXT CLIP")
     def __init__(
             self,
             embed_dim: int,
@@ -404,15 +404,16 @@ class CustomTextCLIP(nn.Module):
             text: Optional[torch.Tensor] = None,
             neg_text : Optional[torch.Tensor] = None
     ):
+        # print(f"CUSTOM TEXT CLIP FORWARD")
         image_features = self.encode_image(image, normalize=True) if image is not None else None
         text_features = self.encode_text(text, normalize=True) if text is not None else None
-        neg_text_features = self.encode_text(neg_text, normalize=True) if text is not None else None
+        neg_text_features = self.encode_text(neg_text, normalize=True) if neg_text is not None else None
 
         if self.output_dict:
             out_dict = {
                 "image_features": image_features,
                 "text_features": text_features,
-                "hard_negative_text_features": neg_text_features,
+                "neg_text_features": neg_text_features,
                 "logit_scale": self.logit_scale.exp()
             }
             if self.logit_bias is not None:

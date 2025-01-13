@@ -1,6 +1,6 @@
 python3 /home/work/VisionAI_Intern_Project/open_clip_vision_enc/src/open_clip_train/main.py \
     --model ViT-B-32 \
-    --name vit-B-32_3k \
+    --force-custom-text \
     --image-mean 0.556 0.531 0.504 \
     --image-std 0.326 0.321 0.334 \
     --seed 0 \
@@ -10,8 +10,8 @@ python3 /home/work/VisionAI_Intern_Project/open_clip_vision_enc/src/open_clip_tr
     --val-data=/home/work/cc_ocr/data_3k/val-000000.tar  \
     --batch-size=128 \
     --lr=1e-4 \
-    --epochs=30 \
-    --workers=2 \
+    --epochs=100 \
+    --workers=1 \
     --train-num-samples 2400 \
     --val-num-samples 600  \
     --device cuda  \

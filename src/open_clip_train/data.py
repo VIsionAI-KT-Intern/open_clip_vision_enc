@@ -19,6 +19,7 @@ from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler, IterableD
 from torch.utils.data.distributed import DistributedSampler
 from webdataset.filters import _shuffle
 from webdataset.tariterators import base_plus_ext, url_opener, tar_file_expander, valid_sample
+from utils import *
 
 try:
     import horovod.torch as hvd
@@ -390,15 +391,25 @@ def get_wds_dataset(args, preprocess_img, is_train, epoch=0, floor=False, tokeni
     def separate_gt(text):
         text = text.split('<sep>')[1]
         return text    
+    
+    def random_hard_negative_generator(text):
+        data_type, text = text.split('<sep>')
+        if data_type == 'cc':
+            hard_fn = random.choice(list(cc_hard_negative_generators.values()))
+        elif data_type == 'ocr':
+            hard_fn = random.choice(list(ocr_hard_negative_generators.values()))
+        text = hard_fn(text)
+        return text
     ##############################
+    
             
     pipeline.extend([
         wds.select(filter_no_caption_or_no_image),
         wds.decode("pilrgb", handler=log_and_continue),
-        wds.rename(image="jpg;png;jpeg;webp", text="txt"),
-        wds.map_dict(image=preprocess_img, text=lambda text: tokenizer(separate_gt(text))[0]),
-        wds.to_tuple("image", "text"),
-        wds.batched(args.batch_size, partial=not is_train)
+        wds.rename(image="jpg;png;jpeg;webp", text="txt", hard_neg="txt"),
+        wds.map_dict(image=preprocess_img, text=lambda text: tokenizer(separate_gt(text))[0], hard_neg=lambda text: tokenizer(random_hard_negative_generator(text))[0]),
+        wds.to_tuple("image", "text", "hard_neg"),
+        wds.batched(128, partial=not True)
     ])
 
     dataset = wds.DataPipeline(*pipeline)

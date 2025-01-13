@@ -14,7 +14,7 @@ from .convert import convert_state_dict
 from .model import CLIP, CustomTextCLIP, convert_weights_to_lp, convert_to_custom_text_state_dict,\
     resize_pos_embed, get_cast_dtype, resize_text_pos_embed, set_model_preprocess_cfg
 from .coca_model import CoCa
-from .loss import ClipLoss, DistillClipLoss, CoCaLoss, SigLipLoss
+from .loss import ClipLoss, DistillClipLoss, CoCaLoss, SigLipLoss, NegClipLoss
 from .pretrained import is_pretrained_cfg, get_pretrained_cfg, download_pretrained,\
     list_pretrained_tags_by_model, download_pretrained_from_hf
 from .transform import image_transform_v2, AugmentationCfg, PreprocessCfg, merge_preprocess_dict, merge_preprocess_kwargs
@@ -175,7 +175,7 @@ def load_checkpoint(
 ):
     if Path(checkpoint_path).suffix in ('.npz', '.npy'):
         # Separate path loading numpy big_vision (SigLIP) weights
-        from open_clip.convert import load_big_vision_weights
+        from local_open_clip.convert import load_big_vision_weights
         load_big_vision_weights(model, checkpoint_path)
         return {}
 
@@ -339,6 +339,7 @@ def create_model(
         if "multimodal_cfg" in model_cfg:
             model = CoCa(**model_cfg, cast_dtype=cast_dtype)
         else:
+            # print(f"create_CustomTextCLIP model")
             model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype)
     else:
         model = CLIP(**model_cfg, cast_dtype=cast_dtype)
@@ -450,7 +451,16 @@ def create_loss(args):
             world_size=args.world_size,
             dist_impl=args.loss_dist_impl,  # siglip has multiple distributed implementations to choose from
         )
-
+    elif args.force_custom_text : #negclip loss
+        return NegClipLoss(
+            local_loss=args.local_loss,
+            gather_with_grad=args.gather_with_grad,
+            cache_labels=True,
+            rank=args.rank,
+            world_size=args.world_size,
+            use_horovod=args.horovod,
+        )
+    
     return ClipLoss(
         local_loss=args.local_loss,
         gather_with_grad=args.gather_with_grad,
