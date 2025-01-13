@@ -402,14 +402,17 @@ class CustomTextCLIP(nn.Module):
             self,
             image: Optional[torch.Tensor] = None,
             text: Optional[torch.Tensor] = None,
+            neg_text : Optional[torch.Tensor] = None
     ):
         image_features = self.encode_image(image, normalize=True) if image is not None else None
         text_features = self.encode_text(text, normalize=True) if text is not None else None
+        neg_text_features = self.encode_text(neg_text, normalize=True) if text is not None else None
 
         if self.output_dict:
             out_dict = {
                 "image_features": image_features,
                 "text_features": text_features,
+                "hard_negative_text_features": neg_text_features,
                 "logit_scale": self.logit_scale.exp()
             }
             if self.logit_bias is not None:
@@ -417,8 +420,8 @@ class CustomTextCLIP(nn.Module):
             return out_dict
 
         if self.logit_bias is not None:
-            return image_features, text_features, self.logit_scale.exp(), self.logit_bias
-        return image_features, text_features, self.logit_scale.exp()
+            return image_features, text_features, neg_text_features, self.logit_scale.exp(), self.logit_bias
+        return image_features, text_features, neg_text_features, self.logit_scale.exp()
 
 
 def convert_weights_to_lp(model: nn.Module, dtype=torch.float16):
